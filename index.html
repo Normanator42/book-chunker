@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Book Chunker">
+  <meta name="description" content="Split books into copy-ready chunks for ChatGPT">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%232563eb'/><text x='50' y='68' font-size='50' text-anchor='middle' fill='white'>📖</text></svg>">
+  <title>Book Chunker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header class="app-header">
+      <h1>Book Chunker</h1>
+      <p class="tagline">Split books into chunks for ChatGPT</p>
+    </header>
+
+    <!-- Home View -->
+    <section id="home-view">
+
+      <!-- File Input -->
+      <div class="card upload-card">
+        <label class="file-label" for="file-input" tabindex="0">
+          <span class="file-icon">📄</span>
+          <span>Choose a .txt file</span>
+        </label>
+        <input type="file" id="file-input" accept=".txt" hidden>
+      </div>
+
+      <!-- Settings (shown after file selected) -->
+      <div id="settings-panel" class="card" hidden>
+        <div class="field">
+          <label for="book-title-input">Book title</label>
+          <input type="text" id="book-title-input" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="chunk-size-input">Target words per chunk</label>
+          <input type="number" id="chunk-size-input" value="3000" min="500" max="20000" step="100">
+        </div>
+        <button id="process-btn" class="btn btn-primary btn-lg">Split into chunks</button>
+      </div>
+
+      <!-- Saved Books -->
+      <div id="saved-books" class="card" hidden>
+        <h2>Saved Books</h2>
+        <ul id="saved-books-list"></ul>
+      </div>
+
+      <!-- Test Mode -->
+      <button id="test-mode-btn" class="btn btn-ghost btn-sm">Run test fixture</button>
+    </section>
+
+    <!-- Reader View -->
+    <section id="reader-view" hidden>
+
+      <!-- Book Info Bar -->
+      <div class="book-info">
+        <h2 id="reader-title"></h2>
+        <div class="stats">
+          <span id="stat-words"></span>
+          <span id="stat-chunks"></span>
+        </div>
+      </div>
+
+      <!-- Primary Actions -->
+      <div class="primary-actions">
+        <button id="copy-next-btn" class="btn btn-primary btn-xl">Copy next part</button>
+        <button id="copy-current-btn" class="btn btn-secondary btn-lg">Copy current part</button>
+      </div>
+
+      <!-- Navigation -->
+      <div class="nav-bar">
+        <button id="prev-btn" class="btn btn-icon" aria-label="Previous part">◀</button>
+        <span id="part-indicator" class="part-indicator">Part 1 of 1</span>
+        <button id="next-btn" class="btn btn-icon" aria-label="Next part">▶</button>
+      </div>
+
+      <!-- Toast -->
+      <div id="toast" class="toast" hidden></div>
+
+      <!-- Preview -->
+      <details id="preview-details" class="card preview-card">
+        <summary>Preview current part</summary>
+        <pre id="preview-text"></pre>
+      </details>
+
+      <!-- Parts List -->
+      <details class="card parts-list-card">
+        <summary>All parts</summary>
+        <ul id="parts-list"></ul>
+      </details>
+
+      <!-- Footer Actions -->
+      <div class="footer-actions">
+        <button id="back-btn" class="btn btn-ghost">← Back to home</button>
+        <button id="delete-btn" class="btn btn-danger btn-sm">Delete this book from device</button>
+      </div>
+    </section>
+
+    <!-- Validation Error -->
+    <div id="error-banner" class="error-banner" hidden></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
