@@ -56,6 +56,9 @@
 
       <!-- Test Mode -->
       <button id="test-mode-btn" class="btn btn-ghost btn-sm">Run test fixture</button>
+
+      <!-- Delete All Data -->
+      <button id="delete-all-btn" class="btn btn-danger btn-sm" style="margin-top: 8px;">Delete all local data</button>
     </section>
 
     <!-- Reader View -->
@@ -79,7 +82,10 @@
       <!-- Navigation -->
       <div class="nav-bar">
         <button id="prev-btn" class="btn btn-icon" aria-label="Previous part">◀</button>
-        <span id="part-indicator" class="part-indicator">Part 1 of 1</span>
+        <div class="nav-info">
+          <span id="part-indicator" class="part-indicator">Part 1 of 1</span>
+          <span id="last-copied-indicator" class="last-copied-indicator" hidden></span>
+        </div>
         <button id="next-btn" class="btn btn-icon" aria-label="Next part">▶</button>
       </div>
 
@@ -100,7 +106,7 @@
 
       <!-- Footer Actions -->
       <div class="footer-actions">
-        <button id="back-btn" class="btn btn-ghost">← Back to home</button>
+        <button id="back-btn" class="btn btn-ghost">← Start another book</button>
         <button id="delete-btn" class="btn btn-danger btn-sm">Delete this book from device</button>
       </div>
     </section>

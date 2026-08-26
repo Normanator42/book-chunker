@@ -230,11 +230,22 @@ body {
   gap: 20px;
   margin-bottom: 16px;
 }
+.nav-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 140px;
+}
 .part-indicator {
   font-size: 1rem;
   font-weight: 600;
-  min-width: 120px;
   text-align: center;
+}
+.last-copied-indicator {
+  font-size: 0.75rem;
+  color: var(--success);
+  font-weight: 500;
+  margin-top: 1px;
 }
 
 /* ── Toast ────────────────────────────────────────────── */

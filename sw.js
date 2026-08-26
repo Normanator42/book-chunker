@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-chunker-v2';
+const CACHE_NAME = 'book-chunker-v3';
 const ASSETS = [
   './',
   './index.html',

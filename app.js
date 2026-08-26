@@ -26,6 +26,8 @@ const previewText = $('#preview-text');
 const partsList = $('#parts-list');
 const backBtn = $('#back-btn');
 const deleteBtn = $('#delete-btn');
+const deleteAllBtn = $('#delete-all-btn');
+const lastCopiedIndicator = $('#last-copied-indicator');
 const errorBanner = $('#error-banner');
 
 // ── State ───────────────────────────────────────────────
@@ -34,16 +36,20 @@ let pendingRawText = null; // raw text before processing
 
 // ── IndexedDB ───────────────────────────────────────────
 const DB_NAME = 'BookChunkerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'books';
+const STATE_STORE = 'appState';
 
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STATE_STORE)) {
+        db.createObjectStore(STATE_STORE, { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -78,6 +84,49 @@ async function deleteBook(id) {
     tx.objectStore(STORE).delete(id);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadBook(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ── App State Persistence ───────────────────────────────
+async function saveAppState(patch) {
+  const db = await openDB();
+  const current = await loadAppState();
+  const merged = { ...current, ...patch, key: 'singleton' };
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STATE_STORE, 'readwrite');
+    tx.objectStore(STATE_STORE).put(merged);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadAppState() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STATE_STORE, 'readonly');
+    const req = tx.objectStore(STATE_STORE).get('singleton');
+    req.onsuccess = () => resolve(req.result || { key: 'singleton' });
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deleteAllData() {
+  const db = await openDB();
+  db.close();
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
   });
 }
 
@@ -240,6 +289,7 @@ function processText(rawText, title, targetSize) {
     targetSize,
     totalWords,
     currentPart: 0,
+    lastCopiedPart: -1,
     savedAt: Date.now()
   };
 }
@@ -268,6 +318,7 @@ async function copyChunk(index, advance = true) {
 
   showToast(`Part ${partNum} copied`);
 
+  currentBook.lastCopiedPart = index;
   if (advance && index < currentBook.chunks.length - 1) {
     currentBook.currentPart = index + 1;
   }
@@ -302,6 +353,7 @@ function showHome() {
   settingsPanel.hidden = true;
   pendingRawText = null;
   fileInput.value = '';
+  saveAppState({ activeBookId: null, scrollY: 0 });
   loadSavedBooks();
 }
 
@@ -364,6 +416,7 @@ function openBook(book) {
   currentBook = book;
   homeView.hidden = true;
   readerView.hidden = false;
+  saveAppState({ activeBookId: book.id });
   renderReader();
 }
 
@@ -381,6 +434,13 @@ function renderReader() {
 
   prevBtn.disabled = currentPart === 0;
   nextBtn.disabled = currentPart >= total - 1;
+
+  if (currentBook.lastCopiedPart >= 0) {
+    lastCopiedIndicator.textContent = `Last copied: Part ${currentBook.lastCopiedPart + 1}`;
+    lastCopiedIndicator.hidden = false;
+  } else {
+    lastCopiedIndicator.hidden = true;
+  }
 
   copyNextBtn.textContent = currentPart < total - 1
     ? `Copy part ${partNum} & advance`
@@ -461,6 +521,7 @@ processBtn.addEventListener('click', async () => {
   if (!book) return;
 
   await saveBook(book);
+  await saveAppState({ defaultChunkSize: targetSize });
   openBook(book);
 });
 
@@ -502,6 +563,14 @@ deleteBtn.addEventListener('click', async () => {
   }
 });
 
+deleteAllBtn.addEventListener('click', async () => {
+  if (confirm('Delete all books and settings from this device? This cannot be undone.')) {
+    await deleteAllData();
+    currentBook = null;
+    location.reload();
+  }
+});
+
 // ── Test Mode ───────────────────────────────────────────
 function generateTestText() {
   const shortPara = 'The quick brown fox jumps over the lazy dog. ' +
@@ -535,10 +604,43 @@ testModeBtn.addEventListener('click', async () => {
   openBook(book);
 });
 
+// ── Scroll Persistence ──────────────────────────────────
+let scrollTimer = null;
+window.addEventListener('scroll', () => {
+  if (!currentBook) return;
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(() => {
+    saveAppState({ scrollY: window.scrollY });
+  }, 300);
+}, { passive: true });
+
 // ── Service Worker Registration ─────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-// ── Init ────────────────────────────────────────────────
-showHome();
+// ── Init: Restore State ─────────────────────────────────
+async function restoreState() {
+  try {
+    const state = await loadAppState();
+
+    if (state.defaultChunkSize) {
+      chunkSizeInput.value = state.defaultChunkSize;
+    }
+
+    if (state.activeBookId) {
+      const book = await loadBook(state.activeBookId);
+      if (book) {
+        openBook(book);
+        if (state.scrollY) {
+          requestAnimationFrame(() => window.scrollTo(0, state.scrollY));
+        }
+        return;
+      }
+    }
+  } catch { /* fall through to home */ }
+
+  showHome();
+}
+
+restoreState();
