@@ -162,6 +162,153 @@ function splitSentences(text) {
   return sentences.filter(s => s.trim().length > 0);
 }
 
+// ── EPUB Text Extraction ────────────────────────────────
+function resolveEpubPath(opfDir, href) {
+  const combined = opfDir + href;
+  const parts = combined.split('/');
+  const resolved = [];
+  for (const part of parts) {
+    if (part === '..') {
+      if (resolved.length > 0) resolved.pop();
+    } else if (part !== '.' && part !== '') {
+      resolved.push(part);
+    }
+  }
+  return resolved.join('/');
+}
+
+function extractBlockText(root) {
+  const BLOCK_TAGS = new Set([
+    'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DETAILS',
+    'DIV', 'DL', 'DT', 'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FOOTER',
+    'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN',
+    'NAV', 'OL', 'P', 'PRE', 'SECTION', 'SUMMARY', 'TABLE', 'TR', 'UL'
+  ]);
+
+  const paragraphs = [];
+  let currentParts = [];
+
+  function flush() {
+    const text = currentParts.join('').trim();
+    if (text) paragraphs.push(text);
+    currentParts = [];
+  }
+
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      currentParts.push(node.textContent);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tag = (node.localName || node.tagName || '').toUpperCase();
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG') return;
+    if (tag === 'BR') { currentParts.push('\n'); return; }
+
+    const isBlock = BLOCK_TAGS.has(tag);
+    if (isBlock) flush();
+
+    for (const child of node.childNodes) {
+      walk(child);
+    }
+
+    if (isBlock) flush();
+  }
+
+  walk(root);
+  flush();
+
+  return paragraphs.join('\n\n');
+}
+
+function htmlToPlainText(html) {
+  let doc = new DOMParser().parseFromString(html, 'application/xhtml+xml');
+
+  if (doc.querySelector('parsererror')) {
+    doc = new DOMParser().parseFromString(html, 'text/html');
+  }
+
+  const body = doc.body || doc.querySelector('body') || doc.documentElement;
+  return extractBlockText(body);
+}
+
+async function extractTextFromEpub(arrayBuffer) {
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  const containerFile = zip.file('META-INF/container.xml');
+  if (!containerFile) throw new Error('Invalid EPUB: missing META-INF/container.xml');
+
+  const containerXml = await containerFile.async('text');
+  const containerDoc = new DOMParser().parseFromString(containerXml, 'application/xml');
+  const rootfiles = containerDoc.getElementsByTagName('rootfile');
+  if (rootfiles.length === 0) throw new Error('Invalid EPUB: no rootfile element');
+
+  const opfPath = rootfiles[0].getAttribute('full-path');
+  if (!opfPath) throw new Error('Invalid EPUB: no full-path on rootfile');
+
+  const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  const opfFile = zip.file(opfPath);
+  if (!opfFile) throw new Error('Invalid EPUB: missing OPF file at ' + opfPath);
+
+  const opfXml = await opfFile.async('text');
+  const opfDoc = new DOMParser().parseFromString(opfXml, 'application/xml');
+
+  const manifest = {};
+  const items = opfDoc.getElementsByTagName('item');
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    manifest[item.getAttribute('id')] = {
+      href: item.getAttribute('href'),
+      mediaType: item.getAttribute('media-type') || ''
+    };
+  }
+
+  const spineRefs = [];
+  const itemrefs = opfDoc.getElementsByTagName('itemref');
+  for (let i = 0; i < itemrefs.length; i++) {
+    spineRefs.push(itemrefs[i].getAttribute('idref'));
+  }
+
+  if (spineRefs.length === 0) throw new Error('Invalid EPUB: empty spine');
+
+  const chapterTexts = [];
+  for (const idref of spineRefs) {
+    const entry = manifest[idref];
+    if (!entry) continue;
+    if (!entry.mediaType.includes('html') && !entry.mediaType.includes('xhtml')) continue;
+
+    const href = decodeURIComponent(entry.href.split('#')[0]);
+    const filePath = resolveEpubPath(opfDir, href);
+    const file = zip.file(filePath);
+    if (!file) continue;
+
+    const html = await file.async('text');
+    const text = htmlToPlainText(html);
+    if (text.trim()) chapterTexts.push(text.trim());
+  }
+
+  if (chapterTexts.length === 0) throw new Error('No readable text found in EPUB');
+  return chapterTexts.join('\n\n');
+}
+
+async function handleEpubFile(file) {
+  try {
+    if (typeof JSZip === 'undefined') {
+      showError('EPUB support not available. Please use a .txt file or reload the app.');
+      return;
+    }
+    const arrayBuffer = await file.arrayBuffer();
+    pendingRawText = await extractTextFromEpub(arrayBuffer);
+    const nameWithoutExt = file.name.replace(/\.epub$/i, '');
+    bookTitleInput.value = nameWithoutExt;
+    settingsPanel.hidden = false;
+    processBtn.focus();
+  } catch (err) {
+    showError('Failed to read EPUB: ' + err.message);
+  }
+}
+
 // ── Chunking Algorithm ──────────────────────────────────
 function chunkText(normalisedText, targetSize) {
   const MIN_SIZE = Math.floor(targetSize * 0.9);
@@ -490,6 +637,11 @@ function renderReader() {
 fileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
+
+  if (file.name.toLowerCase().endsWith('.epub')) {
+    handleEpubFile(file);
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = () => {

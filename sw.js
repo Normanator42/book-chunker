@@ -1,10 +1,11 @@
-const CACHE_NAME = 'book-chunker-v3';
+const CACHE_NAME = 'book-chunker-v4';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './manifest.webmanifest'
+  './manifest.webmanifest',
+  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 ];
 
 self.addEventListener('install', (event) => {

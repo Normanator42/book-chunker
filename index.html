@@ -30,9 +30,9 @@
       <div class="card upload-card">
         <label class="file-label" for="file-input" tabindex="0">
           <span class="file-icon">📄</span>
-          <span>Choose a .txt file</span>
+          <span>Choose a .txt or .epub file</span>
         </label>
-        <input type="file" id="file-input" accept=".txt" hidden>
+        <input type="file" id="file-input" accept=".txt,.epub" hidden>
       </div>
 
       <!-- Settings (shown after file selected) -->
@@ -115,6 +115,7 @@
     <div id="error-banner" class="error-banner" hidden></div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
