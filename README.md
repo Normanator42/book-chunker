@@ -54,3 +54,12 @@ Tap **Run test fixture** on the home screen to generate a synthetic book with sh
 ## Privacy
 
 No data is transmitted anywhere. All processing and storage happens in your browser.
+
+
+## Search within a book
+
+Use **Search this book** to find a word or phrase across every part (case-insensitive, literal matching). Results show matching part numbers, match counts, and highlighted snippets. Tap a result to open its full highlighted preview, or use **Previous / Next** to jump between matching parts, wrapping at either end. Copy buttons still copy the original plain text. **Clear** removes the search.
+
+On a keyboard, **Ctrl+F / Cmd+F** focuses book search; **Enter / Shift+Enter** moves to the next / previous matching part and **Escape** clears the search. Works offline with saved TXT and EPUB books.
+
+After an update, reopen the app online to refresh its offline cache. Saved books remain on the device; do not clear website data.

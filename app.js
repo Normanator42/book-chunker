@@ -30,6 +30,15 @@ const deleteAllBtn = $('#delete-all-btn');
 const lastCopiedIndicator = $('#last-copied-indicator');
 const errorBanner = $('#error-banner');
 
+const bookSearch = $('#book-search');
+const searchStatus = $('#search-status');
+const searchResults = $('#search-results');
+const searchPrev = $('#search-prev');
+const searchNext = $('#search-next');
+const searchClear = $('#search-clear');
+let searchQuery = '';
+let searchMatches = [];
+
 // ── State ───────────────────────────────────────────────
 let currentBook = null;   // { id, title, chunks, targetSize, totalWords, currentPart }
 let pendingRawText = null; // raw text before processing
@@ -561,6 +570,9 @@ async function loadSavedBooks() {
 
 function openBook(book) {
   currentBook = book;
+  bookSearch.value = '';
+  searchQuery = '';
+  searchMatches = [];
   homeView.hidden = true;
   readerView.hidden = false;
   saveAppState({ activeBookId: book.id });
@@ -595,8 +607,9 @@ function renderReader() {
 
   copyCurrentBtn.textContent = `Copy part ${partNum}`;
 
-  previewText.textContent = chunks[currentPart];
-  previewDetails.open = false;
+  highlightText(previewText, chunks[currentPart], findOccurrences(chunks[currentPart], searchQuery));
+  previewDetails.open = Boolean(searchQuery);
+  renderSearchResults();
 
   // Parts list
   partsList.innerHTML = '';
@@ -632,6 +645,117 @@ function renderReader() {
     partsList.appendChild(li);
   }
 }
+
+// Literal, case-insensitive search; regex escaping keeps punctuation literal.
+function findOccurrences(text, query) {
+  if (!query) return [];
+  const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+  return Array.from(text.matchAll(pattern), match => ({ start: match.index, end: match.index + match[0].length }));
+}
+
+function highlightText(element, text, occurrences, start = 0, end = text.length) {
+  element.replaceChildren();
+  let cursor = start;
+  if (start > 0) element.append(document.createTextNode('…'));
+  for (const match of occurrences) {
+    if (match.start < start || match.end > end) continue;
+    element.append(document.createTextNode(text.slice(cursor, match.start)));
+    const mark = document.createElement('mark');
+    mark.textContent = text.slice(match.start, match.end);
+    element.append(mark);
+    cursor = match.end;
+  }
+  element.append(document.createTextNode(text.slice(cursor, end) + (end < text.length ? '…' : '')));
+}
+
+function renderSearchResults() {
+  searchResults.replaceChildren();
+  searchResults.hidden = !searchQuery || searchMatches.length === 0;
+  searchClear.disabled = !bookSearch.value;
+  searchPrev.disabled = searchNext.disabled = searchMatches.length === 0;
+  if (!searchQuery) {
+    searchStatus.textContent = 'Find matching parts anywhere in this book.';
+    return;
+  }
+  const active = searchMatches.findIndex(result => result.part === currentBook.currentPart);
+  const count = searchMatches.reduce((sum, result) => sum + result.occurrences.length, 0);
+  searchStatus.textContent = count === 0 ? 'No matches found.'
+    : `${count} match${count === 1 ? '' : 'es'} in ${searchMatches.length} part${searchMatches.length === 1 ? '' : 's'}`
+      + (active >= 0 ? ` · Matching part ${active + 1} of ${searchMatches.length}` : '');
+  for (const result of searchMatches) {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.className = 'search-result';
+    if (result.part === currentBook.currentPart) button.setAttribute('aria-current', 'true');
+    const label = document.createElement('strong');
+    label.textContent = `Part ${result.part + 1} · ${result.occurrences.length} match${result.occurrences.length === 1 ? '' : 'es'}`;
+    const snippet = document.createElement('span');
+    const text = currentBook.chunks[result.part];
+    const first = result.occurrences[0];
+    highlightText(snippet, text, result.occurrences, Math.max(0, first.start - 55), Math.min(text.length, first.end + 100));
+    button.append(label, snippet);
+    button.addEventListener('click', () => jumpToSearchPart(result.part));
+    li.append(button);
+    searchResults.append(li);
+  }
+}
+
+function jumpToSearchPart(part) {
+  if (!currentBook) return;
+  currentBook.currentPart = part;
+  saveBook(currentBook).catch(() => showError('Could not save reading position.'));
+  renderReader();
+  const mark = previewText.querySelector('mark');
+  previewText.scrollTop = mark ? Math.max(0, mark.offsetTop - previewText.offsetTop - 40) : 0;
+}
+
+function moveSearch(direction) {
+  if (!currentBook || !searchMatches.length) return;
+  const part = currentBook.currentPart;
+  const result = direction > 0
+    ? searchMatches.find(result => result.part > part) || searchMatches[0]
+    : [...searchMatches].reverse().find(result => result.part < part) || searchMatches[searchMatches.length - 1];
+  jumpToSearchPart(result.part);
+}
+
+function updateSearch() {
+  if (!currentBook) return;
+  searchQuery = bookSearch.value.trim();
+  searchMatches = [];
+  if (searchQuery) {
+    currentBook.chunks.forEach((text, part) => {
+      const occurrences = findOccurrences(text, searchQuery);
+      if (occurrences.length) searchMatches.push({ part, occurrences });
+    });
+  }
+  if (searchMatches.length) jumpToSearchPart(searchMatches[0].part);
+  else renderReader();
+}
+
+bookSearch.addEventListener('input', updateSearch);
+searchPrev.addEventListener('click', () => moveSearch(-1));
+searchNext.addEventListener('click', () => moveSearch(1));
+searchClear.addEventListener('click', () => {
+  bookSearch.value = '';
+  updateSearch();
+  bookSearch.focus();
+});
+bookSearch.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    moveSearch(event.shiftKey ? -1 : 1);
+  } else if (event.key === 'Escape') {
+    bookSearch.value = '';
+    updateSearch();
+  }
+});
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && !readerView.hidden) {
+    event.preventDefault();
+    bookSearch.focus();
+    bookSearch.select();
+  }
+});
 
 // ── Event Listeners ─────────────────────────────────────
 fileInput.addEventListener('change', (e) => {
@@ -768,7 +892,21 @@ window.addEventListener('scroll', () => {
 
 // ── Service Worker Registration ─────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Refresh the app shell when a new worker takes over; books remain in IndexedDB.
+  let refreshing = false;
+  const wasControlled = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (wasControlled && !refreshing && !pendingRawText) {
+      refreshing = true;
+      location.reload();
+    }
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(registration => {
+    registration.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) registration.update().catch(() => {});
+    });
+  }).catch(() => {});
 }
 
 // ── Init: Restore State ─────────────────────────────────

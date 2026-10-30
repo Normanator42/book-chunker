@@ -73,6 +73,20 @@
         </div>
       </div>
 
+      <section class="card search-card" aria-label="Search this book">
+        <div class="field">
+          <label for="book-search">Search this book</label>
+          <input id="book-search" type="search" placeholder="Find a word or phrase…" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="search-status">
+        </div>
+        <div class="search-nav">
+          <button id="search-prev" class="btn btn-secondary btn-sm" disabled>← Previous</button>
+          <button id="search-next" class="btn btn-secondary btn-sm" disabled>Next →</button>
+          <button id="search-clear" class="btn btn-ghost btn-sm" disabled>Clear</button>
+        </div>
+        <p id="search-status" role="status" aria-live="polite">Find matching parts anywhere in this book.</p>
+        <ol id="search-results" aria-label="Matching parts" hidden></ol>
+      </section>
+
       <!-- Primary Actions -->
       <div class="primary-actions">
         <button id="copy-next-btn" class="btn btn-primary btn-xl">Copy next part</button>
